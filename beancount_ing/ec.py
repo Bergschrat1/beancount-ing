@@ -5,6 +5,7 @@ import re
 import warnings
 from collections import namedtuple
 from typing import Optional
+import logging
 
 from beancount.core.amount import Amount
 from beancount.core import data, flags
@@ -22,6 +23,8 @@ PRE_HEADER = (
     "Ihrem Internetbanking angezeigt werden."
 )
 
+log = logging.getLogger()
+#log.setLevel(logging.INFO)
 
 class InvalidFormatError(Exception):
     pass
@@ -61,6 +64,7 @@ class ECImporter(Importer):
         self._date_to = None
         self._line_index = -1
         self.import_rules = import_rules
+        log.debug(f"Loaded importer with the folloging rules: {self.import_rules}")
 
     def account(self, filepath: str) -> data.Account:
         return self.account_name
@@ -119,14 +123,15 @@ class ECImporter(Importer):
     def _fix_entry(self, entry, replacements):
         payee, description, posting = replacements
         if payee:
-            print("Replacing payee")
+            log.debug(f"Replacing payee: {entry.payee} with {payee}")
             entry.meta["original_payee"] = entry.payee
             entry = entry._replace(payee=payee)
         if description:
-            print("Replacing description")
+            log.debug(f"Replacing description: {entry.narration} with {description}")
             entry.meta["original_narration"] = entry.narration
             entry = entry._replace(narration=description)
         if posting:
+            log.debug(f"Adding posting: {posting}")
             amount = -entry.postings[0].units
             entry.postings.append(
                 data.Posting(posting, amount, None, None, None, None)
@@ -135,17 +140,26 @@ class ECImporter(Importer):
         return entry
 
     def _get_fixed_entry(self, entry, rules):
+        log.debug("Matching rules for entry " + str(entry))
         for rule in rules:
             # match payee
             for pattern in rule.payee_regexs:
-                if entry.payee and pattern.search(entry.payee, re.IGNORECASE):
+                log.debug("Matching payee regex " + str(pattern.pattern) + " on string " + str(entry.payee))
+                if entry.payee and pattern.search(entry.payee):
+                    log.debug("Found a matching payee.")
                     fixed_entry = self._fix_entry(entry, rule[0])
                     return fixed_entry
+                else:
+                    log.debug("no match")
             # match description
             for pattern in rule.description_regexs:
-                if entry.narration and pattern.search(entry.narration, re.IGNORECASE):
+                log.debug("Matching description regex " + str(pattern.pattern) + " on string " + str(entry.narration))
+                if entry.narration and pattern.search(entry.narration):
+                    log.debug("Found a matching description.")
                     fixed_entry = self._fix_entry(entry, rule[0])
                     return fixed_entry
+                else:
+                    log.debug("no match")
         return entry
 
     def _compile_import_rules(self, rules):
