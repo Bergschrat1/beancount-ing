@@ -169,8 +169,8 @@ class ECImporter(Importer):
                 raise(ValueError(f"Invalid rule configuration: {rule}"))
             compiled_rule = import_rule(
                 (rule[0]),
-                tuple((re.compile(r) for r in rule[1])),
-                tuple((re.compile(r) for r in rule[2])),
+                tuple((re.compile(r, re.IGNORECASE) for r in rule[1])),
+                tuple((re.compile(r, re.IGNORECASE) for r in rule[2])),
             )
             comp_import_rules.append(compiled_rule)
         return comp_import_rules
