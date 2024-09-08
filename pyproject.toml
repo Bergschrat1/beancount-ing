@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "beancount-ing"
-version = "0.6.0"
+version = "1.0.0"
 description = "Beancount Importer for ING (DE) CSV exports"
 readme = "README.md"
 authors = ["Siddhant Goel <me@sgoel.dev>"]
@@ -12,28 +12,33 @@ classifiers = [
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3 :: Only",
 ]
-include = ["README.md", "License.txt"]
+include = ["README.md", "LICENSE.txt"]
 repository = "https://github.com/siddhantgoel/beancount-ing"
 keywords = ["banking", "beancount", "cli-accounting", "finance"]
 
-[tool.black]
-line-length = 79
-skip-string-normalization = true
-
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
+beancount = "^3.0.0"
+beangulp = "^0.1.1"
 
-[tool.poetry.dev-dependencies]
-beancount = "^2.3"
-flake8 = "^5.0"
-pytest = "^7.4"
-black = "^23.3"
+[tool.poetry.group.dev.dependencies]
+taskipy = "^1.12.0"
+ruff = ">=0.5.1,<0.7.0"
+pytest = "^8.2.2"
+
+[tool.poetry.scripts]
+beancount-ing-ec = "beancount_ing.cli:ec"
+
+[tool.taskipy.tasks]
+lint = "ruff check beancount_ing/ tests/"
+test = "pytest tests/"
 
 [build-system]
 requires = ["poetry-core"]

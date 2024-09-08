@@ -8,19 +8,19 @@ from typing import Optional
 import logging
 
 from beancount.core.amount import Amount
-from beancount.core import data
+from beancount.core import data, flags
 from beancount.core.number import Decimal
-from beancount.ingest import importer
+from beangulp.importer import Importer
 
 
-BANKS = ('ING', 'ING-DiBa')
+BANKS = ("ING", "ING-DiBa")
 
-META_KEYS = ('IBAN', 'Kontoname', 'Bank', 'Kunde', 'Zeitraum', 'Saldo')
+META_KEYS = ("IBAN", "Kontoname", "Bank", "Kunde", "Zeitraum", "Saldo")
 
 PRE_HEADER = (
-    'In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. '
-    'Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in '
-    'Ihrem Internetbanking angezeigt werden.'
+    "In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. "
+    "Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in "
+    "Ihrem Internetbanking angezeigt werden."
 )
 
 log = logging.getLogger()
@@ -31,14 +31,14 @@ class InvalidFormatError(Exception):
 
 
 def _format_iban(iban):
-    return re.sub(r'\s+', '', iban, flags=re.UNICODE)
+    return re.sub(r"\s+", "", iban, flags=re.UNICODE)
 
 
 def _format_number_de(value: str) -> Decimal:
-    thousands_sep = '.'
-    decimal_sep = ','
+    thousands_sep = "."
+    decimal_sep = ","
 
-    return Decimal(value.replace(thousands_sep, '').replace(decimal_sep, '.'))
+    return Decimal(value.replace(thousands_sep, "").replace(decimal_sep, "."))
 
 import_rule = namedtuple('import_rule',[
     'replacements',
@@ -46,17 +46,17 @@ import_rule = namedtuple('import_rule',[
     'description_regexs',
 ])
 
-class ECImporter(importer.ImporterProtocol):
+class ECImporter(Importer):
     def __init__(
         self,
-        iban,
-        account,
-        user,
-        file_encoding='ISO-8859-1',
+        iban: str,
+        account_name: str,
+        user: str,
+        file_encoding: Optional[str] = "ISO-8859-1",
         import_rules=[]
     ):
         self.iban = _format_iban(iban)
-        self.account = account
+        self.account_name = account_name
         self.user = user
         self.file_encoding = file_encoding
 
@@ -66,17 +66,17 @@ class ECImporter(importer.ImporterProtocol):
         self.import_rules = import_rules
         log.debug(f"Loaded importer with the folloging rules: {self.import_rules}")
 
-    def file_account(self, _):
-        return self.account
+    def account(self, filepath: str) -> data.Account:
+        return self.account_name
 
     def _is_valid_first_header(self, line):
-        return line.startswith('Umsatzanzeige;Datei erstellt am')
+        return line.startswith("Umsatzanzeige;Datei erstellt am")
 
     def _is_valid_second_header(self, line):
-        return line == ';Letztes Update: aktuell'
+        return line == ";Letztes Update: aktuell"
 
-    def identify(self, file_):
-        with open(file_.name, encoding=self.file_encoding) as fd:
+    def identify(self, filepath: str):
+        with open(filepath, encoding=self.file_encoding) as fd:
 
             def _read_line():
                 return fd.readline().strip()
@@ -103,19 +103,19 @@ class ECImporter(importer.ImporterProtocol):
             lines = [_read_line() for _ in range(len(META_KEYS))]
 
             reader = csv.reader(
-                lines, delimiter=';', quoting=csv.QUOTE_MINIMAL, quotechar='"'
+                lines, delimiter=";", quoting=csv.QUOTE_MINIMAL, quotechar='"'
             )
 
             for line in reader:
                 key, value, *_ = line
 
-                if key == 'IBAN' and _format_iban(value) != self.iban:
+                if key == "IBAN" and _format_iban(value) != self.iban:
                     return False
 
-                if key == 'Bank' and value not in BANKS:
+                if key == "Bank" and value not in BANKS:
                     return False
 
-                if key == 'Kunde' and value != self.user:
+                if key == "Kunde" and value != self.user:
                     return False
 
         return True
@@ -175,7 +175,7 @@ class ECImporter(importer.ImporterProtocol):
             comp_import_rules.append(compiled_rule)
         return comp_import_rules
 
-    def extract(self, file_, existing_entries=None):
+    def extract(self, filepath: str, existing_entries: Optional[data.Entries] = None):
         entries = []
         self._line_index = 0
 
@@ -194,7 +194,7 @@ class ECImporter(importer.ImporterProtocol):
         # pre-compile import rules for performance
         compiled_import_rules = self._compile_import_rules(self.import_rules)
 
-        with open(file_.name, encoding=self.file_encoding) as fd:
+        with open(filepath, encoding=self.file_encoding) as fd:
             # Header - first line
             line = _read_line()
 
@@ -215,35 +215,31 @@ class ECImporter(importer.ImporterProtocol):
             lines = [_read_line() for _ in range(len(META_KEYS))]
 
             reader = csv.reader(
-                lines, delimiter=';', quoting=csv.QUOTE_MINIMAL, quotechar='"'
+                lines, delimiter=";", quoting=csv.QUOTE_MINIMAL, quotechar='"'
             )
 
             for line in reader:
                 key, *values = line
                 self._line_index += 1
 
-                if key == 'IBAN':
+                if key == "IBAN":
                     if _format_iban(values[0]) != self.iban:
                         raise InvalidFormatError()
-                elif key == 'Bank':
+                elif key == "Bank":
                     if values[0] not in BANKS:
                         raise InvalidFormatError()
-                elif key == 'Kunde':
+                elif key == "Kunde":
                     if values[0] != self.user:
                         raise InvalidFormatError()
-                elif key == 'Zeitraum':
-                    splits = values[0].strip().split(' - ')
+                elif key == "Zeitraum":
+                    splits = values[0].strip().split(" - ")
 
                     if len(splits) != 2:
                         raise InvalidFormatError()
 
-                    self._date_from = datetime.strptime(
-                        splits[0], '%d.%m.%Y'
-                    ).date()
-                    self._date_to = datetime.strptime(
-                        splits[1], '%d.%m.%Y'
-                    ).date()
-                elif key == 'Saldo':
+                    self._date_from = datetime.strptime(splits[0], "%d.%m.%Y").date()
+                    self._date_to = datetime.strptime(splits[1], "%d.%m.%Y").date()
+                elif key == "Saldo":
                     # actually this is not a useful balance, because it is
                     # valid on the date of generating the CSV (see first header
                     # line) and not on the closing date of the transactions
@@ -258,16 +254,16 @@ class ECImporter(importer.ImporterProtocol):
 
             descending_by_date = ascending_by_date = None
 
-            if line.startswith('Sortierung'):
-                if re.match('.*Datum absteigend', line):
+            if line.startswith("Sortierung"):
+                if re.match(".*Datum absteigend", line):
                     descending_by_date = True
-                elif re.match('.*Datum aufsteigend', line):
+                elif re.match(".*Datum aufsteigend", line):
                     ascending_by_date = True
                 else:
                     warnings.warn(
-                        f'{file_.name}:{self._line_index}: '
-                        'balance assertions can only be generated '
-                        'if transactions are sorted by date'
+                        f"{filepath}:{self._line_index}: "
+                        "balance assertions can only be generated "
+                        "if transactions are sorted by date"
                     )
                 _read_empty_line()
 
@@ -281,7 +277,7 @@ class ECImporter(importer.ImporterProtocol):
 
             # Data entries
             reader = csv.reader(
-                fd, delimiter=';', quoting=csv.QUOTE_MINIMAL, quotechar='"'
+                fd, delimiter=";", quoting=csv.QUOTE_MINIMAL, quotechar='"'
             )
 
             def remap(names):
@@ -289,9 +285,7 @@ class ECImporter(importer.ImporterProtocol):
                 counter = count(1)
 
                 return [
-                    'Währung_{}'.format(next(counter))
-                    if name == 'Währung'
-                    else name
+                    "Währung_{}".format(next(counter)) if name == "Währung" else name
                     for name in names
                 ]
 
@@ -307,27 +301,27 @@ class ECImporter(importer.ImporterProtocol):
                 last_transaction = (self._line_index, line)
                 if first_transaction is None:
                     first_transaction = last_transaction
-                date = line['Buchung']
-                payee = line['Auftraggeber/Empfänger']
-                booking_text = line['Buchungstext']
-                description = line['Verwendungszweck']
-                amount = line['Betrag']
-                currency = line['Währung_2']
+                date = line["Buchung"]
+                payee = line["Auftraggeber/Empfänger"]
+                booking_text = line["Buchungstext"]
+                description = line["Verwendungszweck"]
+                amount = line["Betrag"]
+                currency = line["Währung_2"]
 
-                meta = data.new_metadata(file_.name, self._line_index)
+                meta = data.new_metadata(filepath, self._line_index)
 
                 amount = Amount(_format_number_de(amount), currency)
-                date = datetime.strptime(date, '%d.%m.%Y').date()
+                date = datetime.strptime(date, "%d.%m.%Y").date()
 
-                description = '{} {}'.format(booking_text, description).strip()
+                description = "{} {}".format(booking_text, description).strip()
 
                 postings = [
-                    data.Posting(self.account, amount, None, None, None, None)
+                    data.Posting(self.account(filepath), amount, None, None, None, None)
                 ]
                 entry = data.Transaction(
                         meta,
                         date,
-                        self.FLAG,
+                        flags.FLAG_OKAY,
                         payee,
                         description,
                         data.EMPTY_SET,
@@ -343,20 +337,20 @@ class ECImporter(importer.ImporterProtocol):
             def balance_assertion(transaction, opening=False, closing=False):
                 lineno = transaction[0]
                 line = transaction[1]
-                balance = _format_number_de(line['Saldo'])
+                balance = _format_number_de(line["Saldo"])
 
                 if opening:
                     # calculate balance before the first transaction
                     # Currencies must match for subtraction
-                    if line['Währung_1'] != line['Währung_2']:
+                    if line["Währung_1"] != line["Währung_2"]:
                         warnings.warn(
-                            f"{file_.name}:{lineno} "
+                            f"{filepath}:{lineno} "
                             "opening balance can not be generated "
                             "due to currency mismatch: "
                             f"{line['Währung_1']} <> {line['Währung_2']}"
                         )
                         return []
-                    balance -= _format_number_de(line['Betrag'])
+                    balance -= _format_number_de(line["Betrag"])
                     balancedate = self._date_from
 
                 if closing:
@@ -366,10 +360,10 @@ class ECImporter(importer.ImporterProtocol):
 
                 return [
                     data.Balance(
-                        data.new_metadata(file_.name, lineno),
+                        data.new_metadata(filepath, lineno),
                         balancedate,
-                        self.account,
-                        Amount(balance, line['Währung_1']),
+                        self.account(filepath),
+                        Amount(balance, line["Währung_1"]),
                         None,
                         None,
                     )
@@ -388,13 +382,9 @@ class ECImporter(importer.ImporterProtocol):
                 opening_transaction = last_transaction
 
             if opening_transaction:
-                entries.extend(
-                    balance_assertion(opening_transaction, opening=True)
-                )
+                entries.extend(balance_assertion(opening_transaction, opening=True))
 
             if closing_transaction:
-                entries.extend(
-                    balance_assertion(closing_transaction, closing=True)
-                )
+                entries.extend(balance_assertion(closing_transaction, closing=True))
 
         return entries
