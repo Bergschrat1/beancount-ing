@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from itertools import count
 import re
 import warnings
+from collections import namedtuple
 from typing import Optional
 
 from beancount.core.amount import Amount
@@ -36,6 +37,11 @@ def _format_number_de(value: str) -> Decimal:
 
     return Decimal(value.replace(thousands_sep, "").replace(decimal_sep, "."))
 
+import_rule = namedtuple('import_rule',[
+    'replacements',
+    'payee_regexs',
+    'description_regexs',
+])
 
 class ECImporter(Importer):
     def __init__(
@@ -44,6 +50,7 @@ class ECImporter(Importer):
         account_name: str,
         user: str,
         file_encoding: Optional[str] = "ISO-8859-1",
+        import_rules=[]
     ):
         self.iban = _format_iban(iban)
         self.account_name = account_name
@@ -53,6 +60,7 @@ class ECImporter(Importer):
         self._date_from = None
         self._date_to = None
         self._line_index = -1
+        self.import_rules = import_rules
 
     def account(self, filepath: str) -> data.Account:
         return self.account_name
@@ -108,6 +116,51 @@ class ECImporter(Importer):
 
         return True
 
+    def _fix_entry(self, entry, replacements):
+        payee, description, posting = replacements
+        if payee:
+            print("Replacing payee")
+            entry.meta["original_payee"] = entry.payee
+            entry = entry._replace(payee=payee)
+        if description:
+            print("Replacing description")
+            entry.meta["original_narration"] = entry.narration
+            entry = entry._replace(narration=description)
+        if posting:
+            amount = -entry.postings[0].units
+            entry.postings.append(
+                data.Posting(posting, amount, None, None, None, None)
+            )
+        # TODO mark transaction to know that it was changed
+        return entry
+
+    def _get_fixed_entry(self, entry, rules):
+        for rule in rules:
+            # match payee
+            for pattern in rule.payee_regexs:
+                if entry.payee and pattern.search(entry.payee, re.IGNORECASE):
+                    fixed_entry = self._fix_entry(entry, rule[0])
+                    return fixed_entry
+            # match description
+            for pattern in rule.description_regexs:
+                if entry.narration and pattern.search(entry.narration, re.IGNORECASE):
+                    fixed_entry = self._fix_entry(entry, rule[0])
+                    return fixed_entry
+        return entry
+
+    def _compile_import_rules(self, rules):
+        comp_import_rules = []
+        for rule in rules:
+            if len(rule) != 3:
+                raise(ValueError(f"Invalid rule configuration: {rule}"))
+            compiled_rule = import_rule(
+                (rule[0]),
+                tuple((re.compile(r) for r in rule[1])),
+                tuple((re.compile(r) for r in rule[2])),
+            )
+            comp_import_rules.append(compiled_rule)
+        return comp_import_rules
+
     def extract(self, filepath: str, existing_entries: Optional[data.Entries] = None):
         entries = []
         self._line_index = 0
@@ -125,6 +178,8 @@ class ECImporter(Importer):
                 raise InvalidFormatError()
 
         with open(filepath, encoding=self.file_encoding) as fd:
+        # pre-compile import rules for performance
+        compiled_import_rules = self._compile_import_rules(self.import_rules)
             # Header - first line
             line = _read_line()
 
@@ -248,9 +303,7 @@ class ECImporter(Importer):
                 postings = [
                     data.Posting(self.account(filepath), amount, None, None, None, None)
                 ]
-
-                entries.append(
-                    data.Transaction(
+                entry = data.Transaction(
                         meta,
                         date,
                         flags.FLAG_OKAY,
@@ -259,8 +312,10 @@ class ECImporter(Importer):
                         data.EMPTY_SET,
                         data.EMPTY_SET,
                         postings,
-                    )
                 )
+                fixed_entry = self._get_fixed_entry(entry, compiled_import_rules)
+
+                entries.append(fixed_entry)
 
                 self._line_index += 1
 
