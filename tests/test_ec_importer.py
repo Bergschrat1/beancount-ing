@@ -38,6 +38,7 @@ class ECImporterTestCase(TestCase):
         self.formatted_iban = "DE99 9999 9999 9999 9999 99"
         self.user = "Max Mustermann"
         self.filename = path_for_temp_file("{}.csv".format(self.iban))
+        self.filename_import_rules = path_for_temp_file("import_rules.yaml")
 
     def tearDown(self):
         if os.path.isfile(self.filename):
@@ -561,3 +562,59 @@ class ECImporterTestCase(TestCase):
         self.assertEqual(directives[5].date, date(2018, 7, 1))
         self.assertEqual(directives[5].amount.number, 1000.0)
         self.assertEqual(directives[5].amount.currency, "EUR")
+
+    def test_auto_importer(self):
+        with open(self.filename, "wb") as fd:
+            fd.write(
+                self._format_data(
+                    """
+                    Umsatzanzeige;Datei erstellt am: 25.07.2018 12:00
+                    ;Letztes Update: aktuell
+
+                    IBAN;{formatted_iban}
+                    Kontoname;Extra-Konto
+                    Bank;ING
+                    Kunde;{user}
+                    Zeitraum;01.06.2018 - 30.06.2018
+                    Saldo;5.000,00;EUR
+
+                    {pre_header}
+
+                    {header}
+                    08.06.2018;08.06.2018;ALDI Filliale;Gutschrift;ALDI SAGT DANKE;1.234,00;EUR;-500,00;EUR
+                    """  # NOQA
+                )
+            )
+        with open(self.filename_import_rules, "wb") as fd:
+            fd.write(
+                """
+                Aldi:
+                  match:
+                    narration:
+                    - ALDI
+                    payee:
+                    - ALDI
+                  replacements:
+                    account: Ausgaben:Food
+                    narration: Lebensmittel
+                    payee: Aldi
+                """.encode("ISO-8859-1")
+            )
+
+        importer = ECImporter(self.iban, "Assets:ING:Extra", self.user)
+
+        directives = importer.extract(self.filename, import_rules=self.filename_import_rules)
+
+        self.assertEqual(len(directives), 1)
+
+        self.assertEqual(directives[0].date, datetime.date(2018, 6, 8))
+        self.assertEqual(directives[0].payee, "ALDI")
+        self.assertEqual(directives[0].narration, "Lebensmittel")
+
+        self.assertEqual(len(directives[0].postings), 1)
+        self.assertEqual(directives[0].postings[0].account, "Assets:ING:Extra")
+        self.assertEqual(directives[0].postings[0].units.currency, "EUR")
+        self.assertEqual(directives[0].postings[0].units.number, Decimal("-500.00"))
+        self.assertEqual(directives[0].postings[1].account, "Expenses:Food")
+        self.assertEqual(directives[0].postings[1].units.currency, "EUR")
+        self.assertEqual(directives[0].postings[1].units.number, Decimal("500.00"))
