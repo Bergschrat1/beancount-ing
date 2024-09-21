@@ -5,6 +5,7 @@ from textwrap import dedent
 from unittest import TestCase
 import os
 from datetime import date
+import logging
 
 from beancount.core.data import Balance, Transaction
 from beancount_ing.ec import BANKS, ECImporter, PRE_HEADER
@@ -595,7 +596,7 @@ class ECImporterTestCase(TestCase):
                     payee:
                     - ALDI
                   replacements:
-                    account: Ausgaben:Food
+                    account: Expenses:Food
                     narration: Lebensmittel
                     payee: Aldi
                 """.encode("ISO-8859-1")
@@ -603,15 +604,18 @@ class ECImporterTestCase(TestCase):
 
         importer = ECImporter(self.iban, "Assets:ING:Extra", self.user)
 
-        directives = importer.extract(self.filename, import_rules=self.filename_import_rules)
+        directives = importer.extract(self.filename, import_rules_path=self.filename_import_rules)
 
+        logging.basicConfig(level=logging.DEBUG)
+
+        print(directives)
         self.assertEqual(len(directives), 1)
 
         self.assertEqual(directives[0].date, datetime.date(2018, 6, 8))
-        self.assertEqual(directives[0].payee, "ALDI")
+        self.assertEqual(directives[0].payee, "Aldi")
         self.assertEqual(directives[0].narration, "Lebensmittel")
 
-        self.assertEqual(len(directives[0].postings), 1)
+        self.assertEqual(len(directives[0].postings), 2)
         self.assertEqual(directives[0].postings[0].account, "Assets:ING:Extra")
         self.assertEqual(directives[0].postings[0].units.currency, "EUR")
         self.assertEqual(directives[0].postings[0].units.number, Decimal("-500.00"))

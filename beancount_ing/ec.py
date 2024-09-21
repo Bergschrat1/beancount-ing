@@ -51,6 +51,7 @@ class ECImporter(Importer, AutoImporter):
         self.account_name = account_name
         self.user = user
         self.file_encoding = file_encoding
+        self.import_rules = []
 
         self._date_from = None
         self._date_to = None
@@ -110,12 +111,18 @@ class ECImporter(Importer, AutoImporter):
 
         return True
 
-    def extract(self, filepath: str, import_rules_path: str = None, existing_entries: Optional[data.Entries] = None):
+    def extract(
+        self,
+        filepath: str,
+        import_rules_path: str = None,
+        existing_entries: Optional[data.Entries] = None,
+    ):
         entries = []
         self._line_index = 0
         if import_rules_path:
-            import_rules = self._load_import_rules(Path(import_rules_path))
-        
+            self.import_rules = self._load_import_rules(Path(import_rules_path))
+            print(self.import_rules)
+
         def _read_line():
             line = fd.readline().strip()
             self._line_index += 1
@@ -253,18 +260,18 @@ class ECImporter(Importer, AutoImporter):
                     data.Posting(self.account(filepath), amount, None, None, None, None)
                 ]
 
-                entries.append(
-                    data.Transaction(
-                        meta,
-                        date,
-                        flags.FLAG_OKAY,
-                        payee,
-                        description,
-                        data.EMPTY_SET,
-                        data.EMPTY_SET,
-                        postings,
-                    )
+                entry = data.Transaction(
+                    meta,
+                    date,
+                    flags.FLAG_OKAY,
+                    payee,
+                    description,
+                    data.EMPTY_SET,
+                    data.EMPTY_SET,
+                    postings,
                 )
+                entry = self._auto_fill_transaction(entry, self.import_rules)
+                entries.append(entry)
 
                 self._line_index += 1
 
