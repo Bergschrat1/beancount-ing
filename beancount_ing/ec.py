@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime, timedelta
 from itertools import count
+from pathlib import Path
 import re
 import warnings
 from typing import Optional
@@ -10,6 +11,7 @@ from beancount.core import data, flags
 from beancount.core.number import Decimal
 from beangulp.importer import Importer
 
+from .auto_importer import AutoImporter
 
 BANKS = ("ING", "ING-DiBa")
 
@@ -37,7 +39,7 @@ def _format_number_de(value: str) -> Decimal:
     return Decimal(value.replace(thousands_sep, "").replace(decimal_sep, "."))
 
 
-class ECImporter(Importer):
+class ECImporter(Importer, AutoImporter):
     def __init__(
         self,
         iban: str,
@@ -108,10 +110,12 @@ class ECImporter(Importer):
 
         return True
 
-    def extract(self, filepath: str, existing_entries: Optional[data.Entries] = None):
+    def extract(self, filepath: str, import_rules_path: str = None, existing_entries: Optional[data.Entries] = None):
         entries = []
         self._line_index = 0
-
+        if import_rules_path:
+            import_rules = self._load_import_rules(Path(import_rules_path))
+        
         def _read_line():
             line = fd.readline().strip()
             self._line_index += 1
