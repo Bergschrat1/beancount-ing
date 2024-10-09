@@ -15,17 +15,23 @@
       let
         # see https://github.com/nix-community/poetry2nix/tree/master#api for more functions and examples.
         pkgs = nixpkgs.legacyPackages.${system};
-        inherit (poetry2nix.lib.mkPoetry2Nix { inherit pkgs; }) mkPoetryEnv;
-        inherit (poetry2nix.lib.mkPoetry2Nix { inherit pkgs; }) mkPoetryApplication;
+        inherit (poetry2nix.lib.mkPoetry2Nix { inherit pkgs; }) mkPoetryApplication defaultPoetryOverrides;
       in
       {
         packages = {
           beancount-ing = mkPoetryApplication { 
             projectDir = self; 
             preferWheels = true;
-          };
-          beancount-auto-import = mkPoetryApplication {
-            projectDir = ./beancount-auto-import;
+            overrides = defaultPoetryOverrides.extend
+              (final: prev: {
+                beancount-auto-import = prev.beancount-auto-import.overridePythonAttrs
+                (
+                  old: {
+                    buildInputs = (old.buildInputs or [ ]) ++ [ prev.poetry ];
+                  }
+                );
+                }
+              );
           };
           default = self.packages.${system}.beancount-ing;
         };        
@@ -35,7 +41,7 @@
         #
         # Use this shell for developing your app.
         devShells.default = pkgs.mkShell {
-          inputsFrom = [ self.packages.${system}.beancount-ing self.packages.${system}.beancount-auto-import ];
+          inputsFrom = [ self.packages.${system}.beancount-ing ];
         };
 
         # Shell for poetry.
