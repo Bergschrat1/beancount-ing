@@ -11,7 +11,7 @@ from beancount.core import data, flags
 from beancount.core.number import Decimal
 from beangulp.importer import Importer
 
-from .auto_importer import AutoImporter
+from beancount_auto_import import AutoImporter
 
 BANKS = ("ING", "ING-DiBa")
 
