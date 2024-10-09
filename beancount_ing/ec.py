@@ -120,7 +120,7 @@ class ECImporter(Importer, AutoImporter):
         entries = []
         self._line_index = 0
         if import_rules_path:
-            self.import_rules = self._load_import_rules(Path(import_rules_path))
+            self.import_rules = self.load_import_rules(Path(import_rules_path))
             print(self.import_rules)
 
         def _read_line():
@@ -270,7 +270,7 @@ class ECImporter(Importer, AutoImporter):
                     data.EMPTY_SET,
                     postings,
                 )
-                entry = self._auto_fill_transaction(entry, self.import_rules)
+                entry = self.auto_fill_transaction(entry, self.import_rules)
                 entries.append(entry)
 
                 self._line_index += 1

@@ -62,7 +62,7 @@ pyyaml = "^6.0.2"
 type = "git"
 url = "https://github.com/Bergschrat1/beancount-auto-import.git"
 reference = "HEAD"
-resolved_reference = "5268a6851c8b43bfd56caad99d510659d82d1408"
+resolved_reference = "b576102b60ab3ceaff7d9bd47454c3ced6707c33"
 
 [[package]]
 name = "beangulp"
