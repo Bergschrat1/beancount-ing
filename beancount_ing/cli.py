@@ -12,19 +12,21 @@ def ec():
     iban = config["iban"]
     account_name = config["account_name"]
     user = config["user"]
+    import_rules = config["import_rules"]
     file_encoding = config.get("file_encoding", "ISO-8859-1")
 
     importer = ECImporter(
         iban,
         account_name,
         user,
+        import_rules,
         file_encoding=file_encoding,
     )
     bg_main(importer)
 
 
 def _extract_config(section: str):
-    pyproject = Path("pyproject.toml")
+    pyproject = Path("account.toml")
 
     if not pyproject.exists():
         print("pyproject.toml not found. Please run from the root of the repo.")
