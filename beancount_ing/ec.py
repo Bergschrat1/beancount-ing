@@ -45,13 +45,15 @@ class ECImporter(Importer, AutoImporter):
         iban: str,
         account_name: str,
         user: str,
+        import_rules: str,
         file_encoding: Optional[str] = "ISO-8859-1",
     ):
         self.iban = _format_iban(iban)
         self.account_name = account_name
         self.user = user
         self.file_encoding = file_encoding
-        self.import_rules = []
+        self.import_rules_path = Path(import_rules)
+        self.import_rules = self.load_import_rules(self.import_rules_path)
 
         self._date_from = None
         self._date_to = None
@@ -114,14 +116,10 @@ class ECImporter(Importer, AutoImporter):
     def extract(
         self,
         filepath: str,
-        import_rules_path: str = None,
         existing_entries: Optional[data.Entries] = None,
     ):
         entries = []
         self._line_index = 0
-        if import_rules_path:
-            self.import_rules = self.load_import_rules(Path(import_rules_path))
-            print(self.import_rules)
 
         def _read_line():
             line = fd.readline().strip()
