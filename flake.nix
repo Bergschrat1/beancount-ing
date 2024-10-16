@@ -14,34 +14,45 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         # see https://github.com/nix-community/poetry2nix/tree/master#api for more functions and examples.
-        pkgs = nixpkgs.legacyPackages.${system};
         inherit (poetry2nix.lib.mkPoetry2Nix { inherit pkgs; }) mkPoetryApplication defaultPoetryOverrides;
-      in
-      {
-        packages = {
-          beancount-ing = mkPoetryApplication { 
-            projectDir = self; 
-            preferWheels = true;
-            overrides = defaultPoetryOverrides.extend
-              (final: prev: {
-                beancount-auto-import = prev.beancount-auto-import.overridePythonAttrs
-                (
-                  old: {
-                    buildInputs = (old.buildInputs or [ ]) ++ [ prev.poetry ];
-                  }
-                );
+        beancount-ing = mkPoetryApplication { 
+          projectDir = self; 
+          preferWheels = true;
+          overrides = defaultPoetryOverrides.extend
+            (final: prev: {
+              beancount-auto-import = prev.beancount-auto-import.overridePythonAttrs
+              (
+                old: {
+                  buildInputs = (old.buildInputs or [ ]) ++ [ prev.poetry ];
                 }
               );
-          };
-          default = self.packages.${system}.beancount-ing;
-        };        
+              }
+            );
+        };
+
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [
+            poetry2nix.overlays.default
+            (final: _: {
+              myapp = final.callPackage beancount-ing { };
+            })
+          ];
+        };
+      in
+      {
+        packages.default = beancount-ing;
+        apps.${system}.default = {
+          type = "app";
+          program = "${beancount-ing}/bin/beancount-ing-ec"; 
+        };
         # Shell for app dependencies.
         #
         #     nix develop
         #
         # Use this shell for developing your app.
         devShells.default = pkgs.mkShell {
-          inputsFrom = [ self.packages.${system}.beancount-ing ];
+          inputsFrom = [ beancount-ing ];
         };
 
         # Shell for poetry.
